@@ -75,7 +75,7 @@ public class UnifiedOrderController extends AbstractPayOrderController {
             res.setPayData(bizRes.buildPayData());
         }
 
-        return ApiRes.okWithSign(res, configContextService.getMchConfigContext(rq.getMchNo()).getMchInfo().getPrivateKey());
+        return ApiRes.okWithSign(res, configContextService.getMchAppConfigContext(rq.getMchNo(), rq.getAppId()).getMchApp().getAppSecret());
     }
 
 
@@ -94,7 +94,7 @@ public class UnifiedOrderController extends AbstractPayOrderController {
 
             AutoBarOrderRQ bizRQ = (AutoBarOrderRQ)rq.buildBizRQ();
             wayCode = JeepayKit.getPayWayCodeByBarCode(bizRQ.getAuthCode());
-            rq.setWayCode(wayCode);
+            rq.setWayCode(wayCode.trim());
         }
 
         if(payWayService.count(PayWay.gw().eq(PayWay::getWayCode, wayCode)) <= 0){

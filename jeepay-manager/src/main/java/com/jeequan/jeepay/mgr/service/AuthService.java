@@ -21,6 +21,7 @@ import com.jeequan.jeepay.core.constants.CS;
 import com.jeequan.jeepay.core.entity.SysUser;
 import com.jeequan.jeepay.core.exception.BizException;
 import com.jeequan.jeepay.core.cache.RedisUtil;
+import com.jeequan.jeepay.core.exception.JeepayAuthenticationException;
 import com.jeequan.jeepay.core.jwt.JWTPayload;
 import com.jeequan.jeepay.core.jwt.JWTUtils;
 import com.jeequan.jeepay.core.model.security.JeeUserDetails;
@@ -29,13 +30,16 @@ import com.jeequan.jeepay.service.impl.SysRoleEntRelaService;
 import com.jeequan.jeepay.service.impl.SysRoleService;
 import com.jeequan.jeepay.service.impl.SysUserService;
 import com.jeequan.jeepay.service.mapper.SysEntitlementMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -48,6 +52,7 @@ import java.util.*;
 * @site https://www.jeepay.vip
 * @date 2021/6/8 17:12
 */
+@Slf4j
 @Service
 public class AuthService {
 
@@ -75,9 +80,15 @@ public class AuthService {
         Authentication authentication = null;
         try {
             authentication = authenticationManager.authenticate(upToken);
+        } catch (JeepayAuthenticationException jex) {
+            throw jex.getBizException() == null ? new BizException(jex.getMessage()) : jex.getBizException();
+        } catch (BadCredentialsException e) {
+            throw new BizException("用户名/密码错误！");
         } catch (AuthenticationException e) {
-            throw new BizException("用户名或密码有误！");
+            log.error("AuthenticationException:", e);
+            throw new BizException("认证服务出现异常， 请重试或联系系统管理员！");
         }
+
         JeeUserDetails jeeUserDetails = (JeeUserDetails) authentication.getPrincipal();
 
         //验证通过后 再查询用户角色和权限信息集合
@@ -155,11 +166,27 @@ public class AuthService {
 
     }
 
+    /** 根据用户ID 删除用户缓存信息  **/
+    public void delAuthentication(List<Long> sysUserIdList){
+        if(sysUserIdList == null || sysUserIdList.isEmpty()){
+            return ;
+        }
+        for (Long sysUserId : sysUserIdList) {
+            Collection<String> cacheKeyList = RedisUtil.keys(CS.getCacheKeyToken(sysUserId, "*"));
+            if(cacheKeyList == null || cacheKeyList.isEmpty()){
+                continue;
+            }
+            for (String cacheKey : cacheKeyList) {
+                RedisUtil.del(cacheKey);
+            }
+        }
+    }
+
     public List<SimpleGrantedAuthority> getUserAuthority(SysUser sysUser){
 
         //用户拥有的角色集合  需要以ROLE_ 开头,  用户拥有的权限集合
         List<String> roleList = sysRoleService.findListByUser(sysUser.getSysUserId());
-        List<String> entList = sysRoleEntRelaService.selectEntIdsByUserId(sysUser.getSysUserId(), sysUser.getIsAdmin(), sysUser.getSystem());
+        List<String> entList = sysRoleEntRelaService.selectEntIdsByUserId(sysUser.getSysUserId(), sysUser.getIsAdmin(), sysUser.getSysType());
 
         List<SimpleGrantedAuthority> grantedAuthorities = new LinkedList<>();
         roleList.stream().forEach(role -> grantedAuthorities.add(new SimpleGrantedAuthority(role)));

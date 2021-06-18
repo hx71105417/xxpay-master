@@ -27,7 +27,7 @@ import javax.validation.constraints.NotBlank;
 * @date 2021/6/8 17:40
 */
 @Data
-public class ChannelUserIdRQ extends AbstractRQ{
+public class ChannelUserIdRQ extends AbstractMchAppRQ{
 
     /** 商户号 **/
     @NotBlank(message="商户号不能为空")

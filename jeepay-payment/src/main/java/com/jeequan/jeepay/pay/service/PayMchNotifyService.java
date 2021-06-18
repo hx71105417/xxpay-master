@@ -16,14 +16,14 @@
 package com.jeequan.jeepay.pay.service;
 
 import com.alibaba.fastjson.JSONObject;
-import com.jeequan.jeepay.core.entity.MchInfo;
 import com.jeequan.jeepay.core.entity.MchNotifyRecord;
 import com.jeequan.jeepay.core.entity.PayOrder;
+import com.jeequan.jeepay.core.entity.RefundOrder;
 import com.jeequan.jeepay.core.utils.JeepayKit;
 import com.jeequan.jeepay.core.utils.StringKit;
 import com.jeequan.jeepay.pay.mq.queue.MqQueue4PayOrderMchNotify;
-import com.jeequan.jeepay.pay.rqrs.QueryPayOrderRS;
-import com.jeequan.jeepay.service.impl.MchInfoService;
+import com.jeequan.jeepay.pay.rqrs.payorder.QueryPayOrderRS;
+import com.jeequan.jeepay.pay.rqrs.refund.QueryRefundOrderRS;
 import com.jeequan.jeepay.service.impl.MchNotifyRecordService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -42,8 +42,8 @@ import org.springframework.stereotype.Service;
 public class PayMchNotifyService {
 
     @Autowired private MchNotifyRecordService mchNotifyRecordService;
-    @Autowired private MchInfoService mchInfoService;
     @Autowired private MqQueue4PayOrderMchNotify mqPayOrderMchNotifyQueue;
+    @Autowired private ConfigContextService configContextService;
 
 
     /** 商户通知信息， 只有订单是终态，才会发送通知， 如明确成功和明确失败 **/
@@ -64,16 +64,63 @@ public class PayMchNotifyService {
                 return ;
             }
 
-            //构建数据
-            MchInfo mchInfo = mchInfoService.getById(dbPayOrder.getMchNo());
+            //商户app私钥
+            String appSecret = configContextService.getMchAppConfigContext(dbPayOrder.getMchNo(), dbPayOrder.getAppId()).getMchApp().getAppSecret();
+
             // 封装通知url
-            String notifyUrl = createNotifyUrl(dbPayOrder, mchInfo.getPrivateKey());
+            String notifyUrl = createNotifyUrl(dbPayOrder, appSecret);
             mchNotifyRecord = new MchNotifyRecord();
             mchNotifyRecord.setOrderId(dbPayOrder.getPayOrderId());
             mchNotifyRecord.setOrderType(MchNotifyRecord.TYPE_PAY_ORDER);
             mchNotifyRecord.setMchNo(dbPayOrder.getMchNo());
             mchNotifyRecord.setMchOrderNo(dbPayOrder.getMchOrderNo()); //商户订单号
             mchNotifyRecord.setIsvNo(dbPayOrder.getIsvNo());
+            mchNotifyRecord.setAppId(dbPayOrder.getAppId());
+            mchNotifyRecord.setNotifyUrl(notifyUrl);
+            mchNotifyRecord.setResResult("");
+            mchNotifyRecord.setNotifyCount(0);
+            mchNotifyRecord.setState(MchNotifyRecord.STATE_ING); // 通知中
+            mchNotifyRecordService.save(mchNotifyRecord);
+
+            //推送到MQ
+            Long notifyId = mchNotifyRecord.getNotifyId();
+            mqPayOrderMchNotifyQueue.send(notifyId + "");
+
+        } catch (Exception e) {
+            log.error("推送失败！", e);
+        }
+    }
+
+    /** 商户通知信息，退款成功的发送通知 **/
+    public void refundOrderNotify(RefundOrder dbRefundOrder){
+
+        try {
+            // 通知地址为空
+            if(StringUtils.isEmpty(dbRefundOrder.getNotifyUrl())){
+                return ;
+            }
+
+            //获取到通知对象
+            MchNotifyRecord mchNotifyRecord = mchNotifyRecordService.findByRefundOrder(dbRefundOrder.getRefundOrderId());
+
+            if(mchNotifyRecord != null){
+
+                log.info("当前已存在通知消息， 不再发送。");
+                return ;
+            }
+
+            //商户app私钥
+            String appSecret = configContextService.getMchAppConfigContext(dbRefundOrder.getMchNo(), dbRefundOrder.getAppId()).getMchApp().getAppSecret();
+
+            // 封装通知url
+            String notifyUrl = createNotifyUrl(dbRefundOrder, appSecret);
+            mchNotifyRecord = new MchNotifyRecord();
+            mchNotifyRecord.setOrderId(dbRefundOrder.getRefundOrderId());
+            mchNotifyRecord.setOrderType(MchNotifyRecord.TYPE_REFUND_ORDER);
+            mchNotifyRecord.setMchNo(dbRefundOrder.getMchNo());
+            mchNotifyRecord.setMchOrderNo(dbRefundOrder.getMchRefundNo()); //商户订单号
+            mchNotifyRecord.setIsvNo(dbRefundOrder.getIsvNo());
+            mchNotifyRecord.setAppId(dbRefundOrder.getAppId());
             mchNotifyRecord.setNotifyUrl(notifyUrl);
             mchNotifyRecord.setResResult("");
             mchNotifyRecord.setNotifyCount(0);
@@ -93,14 +140,14 @@ public class PayMchNotifyService {
     /**
      * 创建响应URL
      */
-    public String createNotifyUrl(PayOrder payOrder, String mchKey) {
+    public String createNotifyUrl(PayOrder payOrder, String appSecret) {
 
         QueryPayOrderRS queryPayOrderRS = QueryPayOrderRS.buildByPayOrder(payOrder);
         JSONObject jsonObject = (JSONObject)JSONObject.toJSON(queryPayOrderRS);
         jsonObject.put("reqTime", System.currentTimeMillis()); //添加请求时间
 
         // 报文签名
-        jsonObject.put("sign", JeepayKit.getSign(jsonObject, mchKey));
+        jsonObject.put("sign", JeepayKit.getSign(jsonObject, appSecret));
 
         // 生成通知
         return StringKit.appendUrlQuery(payOrder.getNotifyUrl(), jsonObject);
@@ -110,7 +157,24 @@ public class PayMchNotifyService {
     /**
      * 创建响应URL
      */
-    public String createReturnUrl(PayOrder payOrder, String mchKey) {
+    public String createNotifyUrl(RefundOrder refundOrder, String appSecret) {
+
+        QueryRefundOrderRS queryRefundOrderRS = QueryRefundOrderRS.buildByRefundOrder(refundOrder);
+        JSONObject jsonObject = (JSONObject)JSONObject.toJSON(queryRefundOrderRS);
+        jsonObject.put("reqTime", System.currentTimeMillis()); //添加请求时间
+
+        // 报文签名
+        jsonObject.put("sign", JeepayKit.getSign(jsonObject, appSecret));
+
+        // 生成通知
+        return StringKit.appendUrlQuery(refundOrder.getNotifyUrl(), jsonObject);
+    }
+
+
+    /**
+     * 创建响应URL
+     */
+    public String createReturnUrl(PayOrder payOrder, String appSecret) {
 
         if(StringUtils.isEmpty(payOrder.getReturnUrl())){
             return "";
@@ -121,7 +185,7 @@ public class PayMchNotifyService {
         jsonObject.put("reqTime", System.currentTimeMillis()); //添加请求时间
 
         // 报文签名
-        jsonObject.put("sign", JeepayKit.getSign(jsonObject, mchKey));   // 签名
+        jsonObject.put("sign", JeepayKit.getSign(jsonObject, appSecret));   // 签名
 
         // 生成跳转地址
         return StringKit.appendUrlQuery(payOrder.getReturnUrl(), jsonObject);

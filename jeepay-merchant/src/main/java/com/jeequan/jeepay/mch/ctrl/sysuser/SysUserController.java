@@ -15,8 +15,10 @@
  */
 package com.jeequan.jeepay.mch.ctrl.sysuser;
 
+import cn.hutool.core.codec.Base64;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.jeequan.jeepay.core.aop.MethodLog;
 import com.jeequan.jeepay.core.constants.ApiCodeEnum;
 import com.jeequan.jeepay.core.constants.CS;
 import com.jeequan.jeepay.core.entity.SysUser;
@@ -35,6 +37,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Arrays;
+import java.util.List;
 
 /**
  * 用户管理类
@@ -61,7 +64,7 @@ public class SysUserController extends CommonCtrl {
 		SysUser queryObject = getObject(SysUser.class);
 
 		LambdaQueryWrapper<SysUser> condition = SysUser.gw();
-		condition.eq(SysUser::getSystem, CS.SYS_TYPE.MCH);
+		condition.eq(SysUser::getSysType, CS.SYS_TYPE.MCH);
 		condition.eq(SysUser::getBelongInfoId, getCurrentUser().getSysUser().getBelongInfoId());
 
 		if(StringUtils.isNotEmpty(queryObject.getRealname())){
@@ -94,9 +97,11 @@ public class SysUserController extends CommonCtrl {
 	/** add */
 	@PreAuthorize("hasAuthority( 'ENT_UR_USER_ADD' )")
 	@RequestMapping(value="", method = RequestMethod.POST)
+	@MethodLog(remark = "添加管理员")
 	public ApiRes add() {
 		SysUser sysUser = getObject(SysUser.class);
 		sysUser.setBelongInfoId(getCurrentUser().getSysUser().getBelongInfoId());
+		sysUser.setIsAdmin(CS.NO);
 		sysUserService.addSysUser(sysUser, CS.SYS_TYPE.MCH);
 		return ApiRes.ok();
 	}
@@ -130,16 +135,28 @@ public class SysUserController extends CommonCtrl {
 	/** update */
 	@PreAuthorize("hasAuthority( 'ENT_UR_USER_EDIT' )")
 	@RequestMapping(value="/{recordId}", method = RequestMethod.PUT)
+	@MethodLog(remark = "修改操作员信息")
 	public ApiRes update(@PathVariable("recordId") Long recordId) {
 		SysUser sysUser = getObject(SysUser.class);
 		sysUser.setSysUserId(recordId);
-
+		// 如果当前用户为非超管则用户状态为普通用户
+		if (getCurrentUser().getSysUser().getIsAdmin() != CS.YES) sysUser.setIsAdmin(CS.NO);
 		SysUser dbRecord = sysUserService.getOne(SysUser.gw().eq(SysUser::getSysUserId, recordId).eq(SysUser::getBelongInfoId, getCurrentMchNo()));
 		if (dbRecord == null) throw new BizException(ApiCodeEnum.SYS_OPERATION_FAIL_SELETE);
 
 		//判断是否自己禁用自己
 		if(recordId.equals(getCurrentUser().getSysUser().getSysUserId()) && sysUser.getState() != null && sysUser.getState() == CS.PUB_DISABLE){
 			throw new BizException("系统不允许禁用当前登陆用户！");
+		}
+
+		//判断是否重置密码
+		Boolean resetPass = getReqParamJSON().getBoolean("resetPass");
+		if (resetPass != null && resetPass) {
+			//判断是否重置密码
+			String updatePwd = getReqParamJSON().getBoolean("defaultPass") == false ? Base64.decodeStr(getValStringRequired("confirmPwd")) : CS.DEFAULT_PWD;
+			sysUserAuthService.resetAuthInfo(sysUser.getSysUserId(), null, null, updatePwd, CS.SYS_TYPE.MCH);
+			// 删除用户redis缓存信息
+			authService.delAuthentication(Arrays.asList(recordId));
 		}
 
 		sysUserService.updateSysUser(sysUser);
@@ -152,5 +169,39 @@ public class SysUserController extends CommonCtrl {
 		return ApiRes.ok();
 	}
 
+	/** delete */
+	@PreAuthorize("hasAuthority( 'ENT_UR_USER_DELETE' )")
+	@RequestMapping(value="/{recordId}", method = RequestMethod.DELETE)
+	@MethodLog(remark = "删除操作员信息")
+	public ApiRes delete(@PathVariable("recordId") Long recordId) {
+		//查询该操作员信息
+		SysUser sysUser = sysUserService.getById(recordId);
+		if (sysUser == null) {
+			throw new BizException("该操作员不存在！");
+		}
 
+		//判断是否自己删除自己
+		if(recordId.equals(getCurrentUser().getSysUser().getSysUserId())){
+			throw new BizException("系统不允许删除当前登陆用户！");
+		}
+
+		//判断是否删除商户默认超管
+		SysUser mchUserDefault = sysUserService.getOne(SysUser.gw()
+				.eq(SysUser::getBelongInfoId, getCurrentMchNo())
+				.eq(SysUser::getSysType, CS.SYS_TYPE.MCH)
+				.eq(SysUser::getIsAdmin, CS.YES)
+		);
+
+		if (mchUserDefault.getSysUserId().equals(recordId)) {
+			throw new BizException("系统不允许删除商户默认用户！");
+		}
+
+		// 删除用户
+		sysUserService.removeUser(sysUser, CS.SYS_TYPE.MCH);
+
+		//如果用户被删除，需要更新redis数据
+		authService.refAuthentication(Arrays.asList(recordId));
+
+		return ApiRes.ok();
+	}
 }

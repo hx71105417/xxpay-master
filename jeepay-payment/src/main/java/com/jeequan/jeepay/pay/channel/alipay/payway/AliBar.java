@@ -29,7 +29,7 @@ import com.jeequan.jeepay.pay.rqrs.payorder.payway.AliBarOrderRS;
 import com.jeequan.jeepay.pay.rqrs.payorder.UnifiedOrderRQ;
 import com.jeequan.jeepay.pay.rqrs.msg.ChannelRetMsg;
 import com.jeequan.jeepay.pay.util.ApiResBuilder;
-import com.jeequan.jeepay.pay.model.MchConfigContext;
+import com.jeequan.jeepay.pay.model.MchAppConfigContext;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 
@@ -55,7 +55,7 @@ public class AliBar extends AlipayPaymentService {
     }
 
     @Override
-    public AbstractRS pay(UnifiedOrderRQ rq, PayOrder payOrder, MchConfigContext mchConfigContext){
+    public AbstractRS pay(UnifiedOrderRQ rq, PayOrder payOrder, MchAppConfigContext mchAppConfigContext){
 
         AliBarOrderRQ bizRQ = (AliBarOrderRQ) rq;
 
@@ -63,7 +63,7 @@ public class AliBar extends AlipayPaymentService {
         AlipayTradePayModel model = new AlipayTradePayModel();
         model.setOutTradeNo(payOrder.getPayOrderId());
         model.setScene("bar_code"); //条码支付 bar_code ; 声波支付 wave_code
-        model.setAuthCode(bizRQ.getAuthCode()); //支付授权码
+        model.setAuthCode(bizRQ.getAuthCode().trim()); //支付授权码
         model.setSubject(payOrder.getSubject()); //订单标题
         model.setBody(payOrder.getBody()); //订单描述信息
         model.setTotalAmount(AmountUtil.convertCent2Dollar(payOrder.getAmount().toString()));  //支付金额
@@ -71,10 +71,10 @@ public class AliBar extends AlipayPaymentService {
         req.setBizModel(model);
 
         //统一放置 isv接口必传信息
-        AlipayKit.putApiIsvInfo(mchConfigContext, req, model);
+        AlipayKit.putApiIsvInfo(mchAppConfigContext, req, model);
 
         //调起支付宝 （如果异常， 将直接跑出   ChannelException ）
-        AlipayTradePayResponse alipayResp = mchConfigContext.getAlipayClientWrapper().execute(req);
+        AlipayTradePayResponse alipayResp = mchAppConfigContext.getAlipayClientWrapper().execute(req);
 
         // 构造函数响应数据
         AliBarOrderRS res = ApiResBuilder.buildSuccess(AliBarOrderRS.class);

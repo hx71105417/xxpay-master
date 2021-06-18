@@ -50,12 +50,12 @@ public class SysEntController extends CommonCtrl {
 
 	/** getOne */
 	@PreAuthorize("hasAnyAuthority( 'ENT_UR_ROLE_ENT_LIST' )")
-	@RequestMapping(value="/bySystem", method = RequestMethod.GET)
+	@RequestMapping(value="/bySysType", method = RequestMethod.GET)
 	public ApiRes bySystem() {
 
 		return ApiRes.ok(sysEntitlementService.getOne(SysEntitlement.gw()
 				.eq(SysEntitlement::getEntId, getValStringRequired("entId"))
-				.eq(SysEntitlement::getSystem, getValStringRequired("system")))
+				.eq(SysEntitlement::getSysType, getValStringRequired("sysType")))
 		);
 	}
 
@@ -66,7 +66,7 @@ public class SysEntController extends CommonCtrl {
 	public ApiRes updateById(@PathVariable("entId") String entId) {
 
 		SysEntitlement queryObject = getObject(SysEntitlement.class);
-		sysEntitlementService.update(queryObject, SysEntitlement.gw().eq(SysEntitlement::getEntId, entId).eq(SysEntitlement::getSystem, queryObject.getSystem()));
+		sysEntitlementService.update(queryObject, SysEntitlement.gw().eq(SysEntitlement::getEntId, entId).eq(SysEntitlement::getSysType, queryObject.getSysType()));
 		return ApiRes.ok();
 	}
 
@@ -77,7 +77,7 @@ public class SysEntController extends CommonCtrl {
 	public ApiRes showTree() {
 
 		//查询全部数据
-		List<SysEntitlement> list = sysEntitlementService.list(SysEntitlement.gw().eq(SysEntitlement::getSystem, getValStringRequired("system")));
+		List<SysEntitlement> list = sysEntitlementService.list(SysEntitlement.gw().eq(SysEntitlement::getSysType, getValStringRequired("sysType")));
 
 		//转换为json树状结构
 		JSONArray jsonArray = (JSONArray) JSONArray.toJSON(list);

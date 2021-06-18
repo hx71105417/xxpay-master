@@ -49,7 +49,7 @@ public class MchNotifyController extends CommonCtrl {
      * @date: 2021/6/7 16:14
      * @describe: 商户通知列表
      */
-    @PreAuthorize("hasAuthority('ENT_MCH_NOTIFY_LIST')")
+    @PreAuthorize("hasAuthority('ENT_NOTIFY_LIST')")
     @RequestMapping(value="", method = RequestMethod.GET)
     public ApiRes list() {
 
@@ -62,6 +62,7 @@ public class MchNotifyController extends CommonCtrl {
         if (StringUtils.isNotEmpty(mchNotify.getMchOrderNo())) wrapper.eq(MchNotifyRecord::getMchOrderNo, mchNotify.getMchOrderNo());
         if (mchNotify.getOrderType() != null) wrapper.eq(MchNotifyRecord::getOrderType, mchNotify.getOrderType());
         if (mchNotify.getState() != null) wrapper.eq(MchNotifyRecord::getState, mchNotify.getState());
+        if (StringUtils.isNotEmpty(mchNotify.getAppId())) wrapper.eq(MchNotifyRecord::getAppId, mchNotify.getAppId());
 
         if (paramJSON != null) {
             if (StringUtils.isNotEmpty(paramJSON.getString("createdStart"))) wrapper.ge(MchNotifyRecord::getCreatedAt, paramJSON.getString("createdStart"));

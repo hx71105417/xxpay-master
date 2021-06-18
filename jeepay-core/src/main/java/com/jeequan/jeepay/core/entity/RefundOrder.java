@@ -23,7 +23,6 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import lombok.experimental.Accessors;
 
-import java.io.Serializable;
 import java.util.Date;
 
 /**
@@ -38,7 +37,13 @@ import java.util.Date;
 @EqualsAndHashCode(callSuper = false)
 @Accessors(chain = true)
 @TableName("t_refund_order")
-public class RefundOrder extends BaseModel implements Serializable {
+public class RefundOrder extends BaseModel {
+
+    public static final byte STATE_INIT = 0; //订单生成
+    public static final byte STATE_ING = 1; //退款中
+    public static final byte STATE_SUCCESS = 2; //退款成功
+    public static final byte STATE_FAIL = 3; //退款失败
+    public static final byte STATE_CLOSED = 4; //退款任务关闭
 
     public static final LambdaQueryWrapper<RefundOrder> gw(){
         return new LambdaQueryWrapper<>();
@@ -47,18 +52,18 @@ public class RefundOrder extends BaseModel implements Serializable {
     private static final long serialVersionUID=1L;
 
     /**
-     * 退款订单号
+     * 退款订单号（支付系统生成订单号）
      */
     @TableId
     private String refundOrderId;
 
     /**
-     * 支付订单号
+     * 支付订单号（与t_pay_order对应）
      */
     private String payOrderId;
 
     /**
-     * 渠道支付单号
+     * 渠道支付单号（与t_pay_order channel_order_no对应）
      */
     private String channelPayOrderNo;
 
@@ -68,19 +73,29 @@ public class RefundOrder extends BaseModel implements Serializable {
     private String mchNo;
 
     /**
+     * 服务商号
+     */
+    private String isvNo;
+
+    /**
+     * 应用ID
+     */
+    private String appId;
+
+    /**
+     * 商户名称
+     */
+    private String mchName;
+
+    /**
      * 类型: 1-普通商户, 2-特约商户(服务商模式)
      */
     private Byte mchType;
 
     /**
-     * 商户退款单号
+     * 商户退款单号（商户系统的订单号）
      */
     private String mchRefundNo;
-
-    /**
-     * 服务商号
-     */
-    private String isvNo;
 
     /**
      * 支付方式代码
@@ -108,14 +123,9 @@ public class RefundOrder extends BaseModel implements Serializable {
     private String currency;
 
     /**
-     * 退款状态:0-订单生成,1-退款中,2-退款成功,3-退款失败
+     * 退款状态:0-订单生成,1-退款中,2-退款成功,3-退款失败,4-退款任务关闭
      */
     private Byte state;
-
-    /**
-     * 退款结果:0-不确认结果,1-等待手动处理,2-确认成功,3-确认失败
-     */
-    private Byte result;
 
     /**
      * 客户端IP
@@ -123,9 +133,9 @@ public class RefundOrder extends BaseModel implements Serializable {
     private String clientIp;
 
     /**
-     * 备注
+     * 退款原因
      */
-    private String remark;
+    private String refundReason;
 
     /**
      * 渠道订单号
@@ -135,12 +145,12 @@ public class RefundOrder extends BaseModel implements Serializable {
     /**
      * 渠道错误码
      */
-    private String channelErrCode;
+    private String errCode;
 
     /**
      * 渠道错误描述
      */
-    private String channelErrMsg;
+    private String errMsg;
 
     /**
      * 特定渠道发起时额外参数
@@ -163,6 +173,11 @@ public class RefundOrder extends BaseModel implements Serializable {
     private Date successTime;
 
     /**
+     * 退款失效时间（失效后系统更改为退款任务关闭状态）
+     */
+    private Date expiredTime;
+
+    /**
      * 创建时间
      */
     private Date createdAt;
@@ -171,6 +186,5 @@ public class RefundOrder extends BaseModel implements Serializable {
      * 更新时间
      */
     private Date updatedAt;
-
 
 }

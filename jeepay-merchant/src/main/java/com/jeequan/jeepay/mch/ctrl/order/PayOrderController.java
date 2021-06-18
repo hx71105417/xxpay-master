@@ -58,7 +58,7 @@ public class PayOrderController extends CommonCtrl {
      * @Description: 订单信息列表
      * @Date: 10:43 2021/5/13
     */
-    @PreAuthorize("hasAuthority('ENT_PAY_ORDER_LIST')")
+    @PreAuthorize("hasAuthority('ENT_ORDER_LIST')")
     @GetMapping
     public ApiRes list() {
 
@@ -72,6 +72,7 @@ public class PayOrderController extends CommonCtrl {
         if (StringUtils.isNotEmpty(payOrder.getWayCode())) wrapper.eq(PayOrder::getWayCode, payOrder.getWayCode());
         if (payOrder.getState() != null) wrapper.eq(PayOrder::getState, payOrder.getState());
         if (payOrder.getNotifyState() != null) wrapper.eq(PayOrder::getNotifyState, payOrder.getNotifyState());
+        if (StringUtils.isNotEmpty(payOrder.getAppId())) wrapper.eq(PayOrder::getAppId, payOrder.getAppId());
         if (paramJSON != null) {
             if (StringUtils.isNotEmpty(paramJSON.getString("createdStart"))) wrapper.ge(PayOrder::getCreatedAt, paramJSON.getString("createdStart"));
             if (StringUtils.isNotEmpty(paramJSON.getString("createdEnd"))) wrapper.le(PayOrder::getCreatedAt, paramJSON.getString("createdEnd"));

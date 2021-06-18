@@ -49,7 +49,7 @@ public class RefundOrderController extends CommonCtrl {
      * @date: 2021/6/7 16:15
      * @describe: 退款订单信息列表
      */
-    @PreAuthorize("hasAuthority('ENT_REFUND_ORDER_LIST')")
+    @PreAuthorize("hasAuthority('ENT_REFUND_LIST')")
     @RequestMapping(value="", method = RequestMethod.GET)
     public ApiRes list() {
 
@@ -65,7 +65,7 @@ public class RefundOrderController extends CommonCtrl {
         if (StringUtils.isNotEmpty(refundOrder.getMchRefundNo())) wrapper.eq(RefundOrder::getMchRefundNo, refundOrder.getMchRefundNo());
         if (refundOrder.getState() != null) wrapper.eq(RefundOrder::getState, refundOrder.getState());
         if (StringUtils.isNotEmpty(refundOrder.getChannelPayOrderNo())) wrapper.eq(RefundOrder::getChannelPayOrderNo, refundOrder.getChannelPayOrderNo());
-        if (refundOrder.getResult() != null) wrapper.eq(RefundOrder::getResult, refundOrder.getResult());
+        if (StringUtils.isNotEmpty(refundOrder.getAppId())) wrapper.eq(RefundOrder::getAppId, refundOrder.getAppId());
         if (paramJSON != null) {
             if (StringUtils.isNotEmpty(paramJSON.getString("createdStart"))) wrapper.ge(RefundOrder::getCreatedAt, paramJSON.getString("createdStart"));
             if (StringUtils.isNotEmpty(paramJSON.getString("createdEnd"))) wrapper.le(RefundOrder::getCreatedAt, paramJSON.getString("createdEnd"));

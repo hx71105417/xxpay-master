@@ -15,6 +15,10 @@
  */
 package com.jeequan.jeepay.service.impl;
 
+import cn.hutool.core.util.IdUtil;
+import cn.hutool.core.util.RandomUtil;
+import cn.hutool.core.util.StrUtil;
+import com.alibaba.fastjson.JSONObject;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.jeequan.jeepay.core.constants.ApiCodeEnum;
 import com.jeequan.jeepay.core.constants.CS;
@@ -27,6 +31,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 
 /**
@@ -51,6 +57,8 @@ public class MchInfoService extends ServiceImpl<MchInfoMapper, MchInfo> {
     @Autowired private SysUserAuthService sysUserAuthService;
 
     @Autowired private IsvInfoService isvInfoService;
+
+    @Autowired private MchAppService mchAppService;
 
     @Transactional(rollbackFor = Exception.class)
     public void addMch(MchInfo mchInfo, String loginUserName) {
@@ -80,12 +88,28 @@ public class MchInfoService extends ServiceImpl<MchInfoMapper, MchInfo> {
         sysUser.setState(mchInfo.getState());
         sysUserService.addSysUser(sysUser, CS.SYS_TYPE.MCH);
 
+        // 插入商户默认应用
+        MchApp mchApp = new MchApp();
+        mchApp.setAppId(IdUtil.objectId());
+        mchApp.setMchNo(mchInfo.getMchNo());
+        mchApp.setAppName("默认应用");
+        mchApp.setAppSecret(RandomUtil.randomString(128));
+        mchApp.setState(CS.YES);
+        mchApp.setCreatedBy(sysUser.getRealname());
+        mchApp.setCreatedUid(sysUser.getSysUserId());
+        saveResult = mchAppService.save(mchApp);
+        if (!saveResult) throw new BizException(ApiCodeEnum.SYS_OPERATION_FAIL_CREATE);
+
         // 存入商户默认用户ID
-        mchInfo.setInitUserId(sysUser.getSysUserId());
-        updateById(mchInfo);
+        MchInfo updateRecord = new MchInfo();
+        updateRecord.setMchNo(mchInfo.getMchNo());
+        updateRecord.setInitUserId(sysUser.getSysUserId());
+        saveResult = updateById(updateRecord);
+        if (!saveResult) throw new BizException(ApiCodeEnum.SYS_OPERATION_FAIL_CREATE);
 
     }
 
+    /** 删除商户 **/
     @Transactional(rollbackFor = Exception.class)
     public List<Long> removeByMchNo(String mchNo) {
         try {
@@ -101,32 +125,38 @@ public class MchInfoService extends ServiceImpl<MchInfoMapper, MchInfo> {
             mchPayPassageService.remove(MchPayPassage.gw().eq(MchPayPassage::getMchNo, mchNo));
 
             // 3.删除当前商户支付接口配置参数
+            List<String> appIdList = new LinkedList<>();
+            mchAppService.list(MchApp.gw().eq(MchApp::getMchNo, mchNo)).forEach(item -> appIdList.add(item.getAppId()));
             payInterfaceConfigService.remove(PayInterfaceConfig.gw()
-                    .eq(PayInterfaceConfig::getInfoId, mchNo)
-                    .eq(PayInterfaceConfig::getInfoType, CS.INFO_TYPE_MCH)
+                    .in(PayInterfaceConfig::getInfoId, appIdList)
+                    .eq(PayInterfaceConfig::getInfoType, CS.INFO_TYPE_MCH_APP)
             );
 
             List<SysUser> userList = sysUserService.list(SysUser.gw()
                     .eq(SysUser::getBelongInfoId, mchNo)
-                    .eq(SysUser::getSystem, CS.SYS_TYPE.MCH)
+                    .eq(SysUser::getSysType, CS.SYS_TYPE.MCH)
             );
+
+            // 4.删除当前商户应用信息
+            mchAppService.removeByIds(appIdList);
+
             // 返回的用户id
             List<Long> userIdList = new ArrayList<>();
             if (userList.size() > 0) {
                 for (SysUser user:userList) {
                     userIdList.add(user.getSysUserId());
                 }
-                // 4.删除当前商户用户子用户信息
+                // 5.删除当前商户用户子用户信息
                 sysUserAuthService.remove(SysUserAuth.gw().in(SysUserAuth::getUserId, userIdList));
             }
 
-            // 5.删除当前商户的登录用户
+            // 6.删除当前商户的登录用户
             sysUserService.remove(SysUser.gw()
                     .eq(SysUser::getBelongInfoId, mchNo)
-                    .eq(SysUser::getSystem, CS.SYS_TYPE.MCH)
+                    .eq(SysUser::getSysType, CS.SYS_TYPE.MCH)
             );
 
-            // 6.删除当前商户
+            // 7.删除当前商户
             boolean removeMchInfo = removeById(mchNo);
             if (!removeMchInfo) throw new BizException("删除当前商户失败");
             return userIdList;

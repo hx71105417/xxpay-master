@@ -54,7 +54,7 @@ public class SysLogController extends CommonCtrl {
      * @date: 2021/6/7 16:15
      * @describe: 日志记录列表
      */
-    @PreAuthorize("hasAuthority('ENT_SYS_LOG_LIST')")
+    @PreAuthorize("hasAuthority('ENT_LOG_LIST')")
     @RequestMapping(value="", method = RequestMethod.GET)
     public ApiRes list() {
         SysLog sysLog = getObject(SysLog.class);
@@ -64,7 +64,7 @@ public class SysLogController extends CommonCtrl {
         condition.orderByDesc(SysLog::getCreatedAt);
         if (sysLog.getUserId() != null) condition.eq(SysLog::getUserId, sysLog.getUserId());
         if (sysLog.getUserName() != null) condition.eq(SysLog::getUserName, sysLog.getUserName());
-        if (StringUtils.isNotEmpty(sysLog.getSystem())) condition.eq(SysLog::getSystem, sysLog.getSystem());
+        if (StringUtils.isNotEmpty(sysLog.getSysType())) condition.eq(SysLog::getSysType, sysLog.getSysType());
         if (paramJSON != null) {
             if (StringUtils.isNotEmpty(paramJSON.getString("createdStart"))) condition.ge(SysLog::getCreatedAt, paramJSON.getString("createdStart"));
             if (StringUtils.isNotEmpty(paramJSON.getString("createdEnd"))) condition.le(SysLog::getCreatedAt, paramJSON.getString("createdEnd"));
